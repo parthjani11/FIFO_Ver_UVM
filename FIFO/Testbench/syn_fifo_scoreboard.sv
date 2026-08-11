@@ -24,6 +24,8 @@ class syn_fifo_scoreboard extends uvm_component;
   int unsigned blocked_read_checks;
   int unsigned overflow_block_checks;
 
+  string current_test_name = "INITIALIZATION";
+
   function new(string name, uvm_component parent);
     super.new(name, parent);
   endfunction
@@ -76,9 +78,10 @@ class syn_fifo_scoreboard extends uvm_component;
     if (expected_blocked_q.pop_front() == 1) begin
       if (t.data_out !== last_valid_data_out) begin
         mismatch_cnt++;
+        // ADD TEST NAME TO THIS PRINT
         `uvm_error("SCB", $sformatf(
-          "Blocked-read data_out changed! exp(held)=%0h act=%0h",
-          last_valid_data_out, t.data_out))
+          "[%s] Blocked-read data_out changed! exp(held)=%0h act=%0h",
+          current_test_name, last_valid_data_out, t.data_out)) 
       end else begin
         match_cnt++;
       end
@@ -88,18 +91,27 @@ class syn_fifo_scoreboard extends uvm_component;
         match_cnt++;
       end else begin
         mismatch_cnt++;
+        // ADD TEST NAME TO THIS PRINT
         `uvm_error("SCB", $sformatf(
-          "data_out mismatch: exp=%0h act=%0h", exp_data, t.data_out))
+          "[%s] data_out mismatch: exp=%0h act=%0h", 
+          current_test_name, exp_data, t.data_out))
       end
       last_valid_data_out = t.data_out;
     end
   endfunction
 
   function void report_phase(uvm_phase phase);
-    `uvm_info("SCB", $sformatf(
-      "SCOREBOARD REPORT: match=%0d mismatch=%0d blocked_read_checks=%0d overflow_block_checks=%0d",
-      match_cnt, mismatch_cnt, blocked_read_checks, overflow_block_checks), UVM_LOW)
+    int total_transactions = match_cnt + mismatch_cnt;
+    
+    `uvm_info("SCB", "==================================================", UVM_NONE)
+    `uvm_info("SCB", "          SCOREBOARD TRANSACTION SUMMARY          ", UVM_NONE)
+    `uvm_info("SCB", "==================================================", UVM_NONE)
+    `uvm_info("SCB", $sformatf(" Total Read Transactions : %0d", total_transactions), UVM_NONE)
+    `uvm_info("SCB", $sformatf(" Transactions PASSED     : %0d", match_cnt), UVM_NONE)
+    `uvm_info("SCB", $sformatf(" Transactions FAILED     : %0d", mismatch_cnt), UVM_NONE)
+    `uvm_info("SCB", "==================================================", UVM_NONE)
+    
     if (mismatch_cnt > 0)
-      `uvm_error("SCB", $sformatf("TEST FAILED with %0d mismatches", mismatch_cnt))
+      `uvm_error("SCB", $sformatf("TEST FAILED with %0d mismatches out of %0d transactions", mismatch_cnt, total_transactions))
   endfunction
 endclass
