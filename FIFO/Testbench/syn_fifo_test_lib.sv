@@ -70,7 +70,33 @@ endclass
 
 class syn_fifo_regression_test extends syn_fifo_base_test;
   `uvm_component_utils(syn_fifo_regression_test)
-  function new(string name, uvm_component parent); super.new(name, parent); endfunction
+
+  int unsigned passed_cnt = 0;
+  int unsigned failed_cnt = 0;
+  string       failed_names[$];
+
+  function new(string name, uvm_component parent); 
+    super.new(name, parent); 
+  endfunction
+
+  task execute_testcase(uvm_sequence_base seq, string test_name);
+    int unsigned initial_mismatches = env.scb.mismatch_cnt;
+    
+    // TELL THE SCOREBOARD WHICH TESTCASE IS ABOUT TO RUN
+    env.scb.current_test_name = test_name; 
+
+    `uvm_info("REGRESSION", $sformatf("Starting testcase: %s...", test_name), UVM_LOW)
+    seq.start(env.act_agent.seqr);
+    
+    if (env.scb.mismatch_cnt > initial_mismatches) begin
+      failed_cnt++;
+      failed_names.push_back(test_name);
+      `uvm_error("REGRESSION", $sformatf("Testcase FAILED: %s", test_name))
+    end else begin
+      passed_cnt++;
+      `uvm_info("REGRESSION", $sformatf("Testcase PASSED: %s", test_name), UVM_LOW)
+    end
+  endtask
 
   task run_phase(uvm_phase phase);
     syn_fifo_fill_to_full_seq          s1;
@@ -90,13 +116,33 @@ class syn_fifo_regression_test extends syn_fifo_base_test;
     s4.total_ops = `RAM_DEPTH * 15; 
     s5.num_items = 50000; 
 
-    s1.start(env.act_agent.seqr);
-    s2.start(env.act_agent.seqr);
-    s3.start(env.act_agent.seqr);
-    s4.start(env.act_agent.seqr);
-    s5.start(env.act_agent.seqr);
+    // Execute each sequence through the tracking wrapper
+    execute_testcase(s1, "syn_fifo_fill_to_full_seq");
+    execute_testcase(s2, "syn_fifo_drain_to_empty_seq");
+    execute_testcase(s3, "syn_fifo_boundary_simultaneous_seq");
+    execute_testcase(s4, "syn_fifo_wrap_stream_seq");
+    execute_testcase(s5, "syn_fifo_random_seq");
 
     #100;
     phase.drop_objection(this);
   endtask
+
+  // Print the final pass/fail summary table at the very end of the simulation
+  function void report_phase(uvm_phase phase);
+    super.report_phase(phase);
+    `uvm_info("SUMMARY", "==================================================", UVM_NONE)
+    `uvm_info("SUMMARY", "               REGRESSION TEST SUMMARY            ", UVM_NONE)
+    `uvm_info("SUMMARY", "==================================================", UVM_NONE)
+    `uvm_info("SUMMARY", $sformatf(" Total Testcases Passed : %0d", passed_cnt), UVM_NONE)
+    `uvm_info("SUMMARY", $sformatf(" Total Testcases Failed : %0d", failed_cnt), UVM_NONE)
+    
+    if (failed_cnt > 0) begin
+      `uvm_info("SUMMARY", "--------------------------------------------------", UVM_NONE)
+      `uvm_info("SUMMARY", " LIST OF FAILED TESTCASES:", UVM_NONE)
+      foreach (failed_names[i]) begin
+        `uvm_info("SUMMARY", $sformatf("  -> %s", failed_names[i]), UVM_NONE)
+      end
+    end
+    `uvm_info("SUMMARY", "==================================================", UVM_NONE)
+  endfunction
 endclass
